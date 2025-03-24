@@ -1,0 +1,423 @@
+@page "/"
+@page "/todo"
+@using MudBlazor
+@using ToDoList.Models
+@inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+
+<PageTitle>ToDoList.ai</PageTitle>
+
+<link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Roboto+Serif:opsz,wght@8..144,100..900&display=swap" rel="stylesheet">
+<link href="css/todo.css" rel="stylesheet" />
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-8">
+    <MudPaper Class="pa-6" Elevation="0">
+        <h1 class="mb-6 text-center" style="color: black; font-size: 2.5rem; font-weight: bold; font-family: 'Permanent Marker', cursive;">ToDoList.ai</h1>
+        
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-6" Elevation="0">
+                    <h2 class="mb-6" style="color: black;">Add New Task</h2>
+                    <MudTextField @bind-Value="_newTask.Title" 
+                                Label="Title" 
+                                Variant="Variant.Outlined" 
+                                FullWidth="@true" 
+                                Class="mb-4"/>
+                    
+                    <MudTextField @bind-Value="_newTask.Description" 
+                                Label="Description (Optional)" 
+                                Variant="Variant.Outlined" 
+                                FullWidth="@true" 
+                                Lines="2"
+                                Class="mb-4"/>
+                    
+                    <MudSelect @bind-Value="_newTask.Priority" 
+                             Label="Priority" 
+                             Variant="Variant.Outlined" 
+                             FullWidth="@true" 
+                             Class="mb-4">
+                        <MudSelectItem Value="@Priority.Low">Low</MudSelectItem>
+                        <MudSelectItem Value="@Priority.Medium">Medium</MudSelectItem>
+                        <MudSelectItem Value="@Priority.High">High</MudSelectItem>
+                        <MudSelectItem Value="@Priority.Urgent">Urgent</MudSelectItem>
+                    </MudSelect>
+                    
+                    <MudSelect @bind-Value="_newTask.Status" 
+                             Label="Status" 
+                             Variant="Variant.Outlined" 
+                             FullWidth="@true" 
+                             Class="mb-4">
+                        <MudSelectItem Value="@TaskItemStatus.NotStarted">Not Started</MudSelectItem>
+                        <MudSelectItem Value="@TaskItemStatus.InProgress">In Progress</MudSelectItem>
+                        <MudSelectItem Value="@TaskItemStatus.Completed">Completed</MudSelectItem>
+                        <MudSelectItem Value="@TaskItemStatus.OnHold">On Hold</MudSelectItem>
+                    </MudSelect>
+                    
+                    <MudSelect T="Complexity?" @bind-Value="_newTask.Complexity" 
+                             Label="Complexity (Optional)" 
+                             Variant="Variant.Outlined" 
+                             FullWidth="@true" 
+                             Class="mb-4">
+                        <MudSelectItem T="Complexity?" Value="@null">None</MudSelectItem>
+                        <MudSelectItem T="Complexity?" Value="@Complexity.Simple">Simple</MudSelectItem>
+                        <MudSelectItem T="Complexity?" Value="@Complexity.Moderate">Moderate</MudSelectItem>
+                        <MudSelectItem T="Complexity?" Value="@Complexity.Complex">Complex</MudSelectItem>
+                    </MudSelect>
+                    
+                    <MudTextField @bind-Value="_estimatedTimeString" 
+                                Label="Estimated Time (Optional, HH:mm)" 
+                                Variant="Variant.Outlined" 
+                                FullWidth="@true" 
+                                Class="mb-4"/>
+                    
+                    <MudCheckBox @bind-Checked="_hasDeadline" 
+                               Label="Set Deadline" 
+                               Color="Color.Default" 
+                               Class="mb-4"/>
+                    
+                    @if (_hasDeadline)
+                    {
+                        <MudDatePicker Date="_newTask.Deadline" 
+                                     DateChanged="OnDeadlineChanged"
+                                     Label="Deadline" 
+                                     Variant="Variant.Outlined" 
+                                     FullWidth="@true" 
+                                     Class="mb-6"/>
+                    }
+                    
+                    <MudStack Row="true" Spacing="2" Class="mt-4">
+                        <MudButton Color="Color.Default" 
+                                 OnClick="AddTask" 
+                                 Disabled="@_isLoading"
+                                 Variant="Variant.Filled"
+                                 Size="Size.Large">Add Task</MudButton>
+                        <MudButton Color="Color.Default" 
+                                 OnClick="ClearForm"
+                                 Disabled="@_isLoading"
+                                 Variant="Variant.Outlined"
+                                 Size="Size.Large">Clear Form</MudButton>
+                        <MudButton Color="Color.Default" 
+                                 OnClick="@(() => _showImportDialog = true)" 
+                                 Disabled="@_isLoading"
+                                 Variant="Variant.Outlined"
+                                 Size="Size.Large">Import Tasks</MudButton>
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudPaper Class="pa-6" Elevation="0">
+                    <h2 class="mb-6" style="color: black;">Task List</h2>
+                    @if (_isLoading)
+                    {
+                        <MudProgressCircular Color="Color.Default" Indeterminate="true" Size="Size.Large" Class="mt-8" />
+                    }
+                    else if (_tasks.Any())
+                    {
+                        <MudList Dense="true" Class="mt-4">
+                            @foreach (var task in _tasks)
+                            {
+                                <MudListItem>
+                                    <MudCard Class="mb-4" Elevation="0" Style="@GetTaskCardStyle(_tasks.IndexOf(task))">
+                                        <MudCardContent>
+                                            <MudGrid>
+                                                <MudItem xs="12">
+                                                    <h3 class="mb-2" style="color: black;">@task.Title</h3>
+                                                    @if (!string.IsNullOrEmpty(task.Description))
+                                                    {
+                                                        <p class="mt-1" style="color: black;">@task.Description</p>
+                                                    }
+                                                    <div class="mt-2" style="color: black;">
+                                                        @if (task.Deadline.HasValue)
+                                                        {
+                                                            <div>Deadline: @task.Deadline.Value.ToString("g")</div>
+                                                        }
+                                                        @if (task.EstimatedTime.HasValue)
+                                                        {
+                                                            <div>Est. Time: @task.EstimatedTime.Value.ToString(@"hh\:mm")</div>
+                                                        }
+                                                    </div>
+                                                </MudItem>
+                                                <MudItem xs="12" Class="d-flex align-center mt-2">
+                                                    <MudChip Color="Color.Default" 
+                                                            Size="Size.Small" 
+                                                            Class="mr-2"
+                                                            Variant="Variant.Outlined"
+                                                            DataPriority="@task.Priority.ToString()">
+                                                        @task.Priority
+                                                    </MudChip>
+                                                    <MudChip Color="Color.Default" 
+                                                            Size="Size.Small" 
+                                                            Class="mr-2"
+                                                            Variant="Variant.Outlined"
+                                                            DataStatus="@task.Status.ToString()">
+                                                        @task.Status
+                                                    </MudChip>
+                                                    @if (task.Complexity.HasValue)
+                                                    {
+                                                        <MudChip Color="Color.Default" 
+                                                                Size="Size.Small" 
+                                                                Class="mr-2"
+                                                                Variant="Variant.Outlined"
+                                                                DataComplexity="@task.Complexity.Value.ToString()">
+                                                            @task.Complexity
+                                                        </MudChip>
+                                                    }
+                                                </MudItem>
+                                            </MudGrid>
+                                        </MudCardContent>
+                                    </MudCard>
+                                </MudListItem>
+                            }
+                        </MudList>
+                        
+                        <MudStack Row="true" Spacing="2" Class="mt-4">
+                            <MudButton Color="Color.Default" 
+                                     OnClick="GetSchedule" 
+                                     Disabled="@_isLoading"
+                                     Variant="Variant.Filled"
+                                     Size="Size.Large">Get Schedule</MudButton>
+                            <MudButton Color="Color.Default" 
+                                     OnClick="ExportTasks" 
+                                     Disabled="@_isLoading"
+                                     Variant="Variant.Outlined"
+                                     Size="Size.Large">Export Tasks</MudButton>
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <p style="color: black;" class="mt-4">No tasks added yet. Add a task to get started!</p>
+                    }
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+</MudContainer>
+
+<MudDialog @bind-IsVisible="_showImportDialog">
+    <DialogContent>
+        <h2 class="mb-4" style="color: black;">Import Tasks</h2>
+        <p class="mb-4" style="color: black;">Select a JSON file containing your tasks to import.</p>
+        <InputFile OnChange="OnFileSelected" />
+        <MudButton HtmlTag="label"
+                   Variant="Variant.Filled"
+                   Color="Color.Default"
+                   StartIcon="@Icons.Material.Filled.CloudUpload"
+                   for="file-upload"
+                   Class="mr-2">
+            Choose File
+            <InputFile OnChange="OnFileSelected" id="file-upload" class="d-none" />
+        </MudButton>
+        <MudButton Color="Color.Default" OnClick="CloseImportDialog" Variant="Variant.Outlined">Cancel</MudButton>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    private List<TaskItem> _tasks = new();
+    private TaskItem _newTask = new();
+    private string _estimatedTimeString = string.Empty;
+    private bool _isLoading = false;
+    private bool _hasDeadline = false;
+    private bool _showImportDialog = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JSRuntime.InvokeVoidAsync("initializeGeminiApi");
+        }
+    }
+
+    private void AddTask()
+    {
+        if (string.IsNullOrWhiteSpace(_newTask.Title))
+        {
+            Snackbar.Add("Title is required!", Severity.Warning);
+            return;
+        }
+
+        if (!TimeSpan.TryParse(_estimatedTimeString, out TimeSpan estimatedTime))
+        {
+            _newTask.EstimatedTime = null;
+        }
+        else
+        {
+            _newTask.EstimatedTime = estimatedTime;
+        }
+
+        if (!_hasDeadline)
+        {
+            _newTask.Deadline = null;
+        }
+
+        _tasks.Add(_newTask);
+        ClearForm();
+        StateHasChanged();
+        Snackbar.Add("Task added successfully!", Severity.Success);
+    }
+
+    private void ClearForm()
+    {
+        _newTask = new TaskItem();
+        _estimatedTimeString = string.Empty;
+        _hasDeadline = false;
+        StateHasChanged();
+    }
+
+    private async Task GetSchedule()
+    {
+        try
+        {
+            _isLoading = true;
+            StateHasChanged();
+
+            var tasksJson = System.Text.Json.JsonSerializer.Serialize(_tasks, new System.Text.Json.JsonSerializerOptions 
+            { 
+                WriteIndented = true 
+            });
+            var prompt = $"I have the following tasks to schedule:\n{tasksJson}\n\nPlease analyze these tasks and provide a recommended schedule based on priority, deadline, and complexity. Return ONLY the JSON array of tasks. Do not include any markdown formatting or backticks.";
+
+            Console.WriteLine("Request to Gemini API:");
+            Console.WriteLine(prompt);
+            Console.WriteLine("\n");
+
+            var response = await JSRuntime.InvokeAsync<string>("sendGeminiMessage", prompt);
+            
+            Console.WriteLine("Response from Gemini API:");
+            Console.WriteLine(response);
+            Console.WriteLine("\n");
+
+            // Clean the response by removing any markdown formatting or backticks
+            response = response.Trim('`').Trim();
+            if (response.StartsWith("```json"))
+            {
+                response = response.Substring(7);
+            }
+            if (response.EndsWith("```"))
+            {
+                response = response.Substring(0, response.Length - 3);
+            }
+            response = response.Trim();
+
+            var scheduledTasks = System.Text.Json.JsonSerializer.Deserialize<List<TaskItem>>(response);
+
+            if (scheduledTasks != null)
+            {
+                _tasks = scheduledTasks;
+                Snackbar.Add("Schedule generated successfully!", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("Error in GetSchedule:");
+            Console.WriteLine(ex);
+            Snackbar.Add($"Error generating schedule: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ExportTasks()
+    {
+        try
+        {
+            var tasksJson = System.Text.Json.JsonSerializer.Serialize(_tasks, new System.Text.Json.JsonSerializerOptions 
+            { 
+                WriteIndented = true 
+            });
+            
+            await JSRuntime.InvokeVoidAsync("downloadFile", "tasks.json", tasksJson);
+            Snackbar.Add("Tasks exported successfully!", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error exporting tasks: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task OnFileSelected(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            using var reader = new StreamReader(file.OpenReadStream());
+            var content = await reader.ReadToEndAsync();
+            var importedTasks = System.Text.Json.JsonSerializer.Deserialize<List<TaskItem>>(content);
+
+            if (importedTasks != null && importedTasks.Any())
+            {
+                _tasks.AddRange(importedTasks);
+                Snackbar.Add($"Successfully imported {importedTasks.Count} tasks!", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("No tasks found in the imported file.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error importing tasks: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            CloseImportDialog();
+        }
+    }
+
+    private void CloseImportDialog()
+    {
+        _showImportDialog = false;
+        StateHasChanged();
+    }
+
+    private Color GetPriorityColor(Priority priority) => priority switch
+    {
+        Priority.Low => Color.Success,
+        Priority.Medium => Color.Info,
+        Priority.High => Color.Warning,
+        Priority.Urgent => Color.Error,
+        _ => Color.Default
+    };
+
+    private Color GetStatusColor(TaskItemStatus status) => status switch
+    {
+        TaskItemStatus.NotStarted => Color.Default,
+        TaskItemStatus.InProgress => Color.Info,
+        TaskItemStatus.Completed => Color.Success,
+        TaskItemStatus.OnHold => Color.Warning,
+        _ => Color.Default
+    };
+
+    private Color GetComplexityColor(Complexity complexity) => complexity switch
+    {
+        Complexity.Simple => Color.Success,
+        Complexity.Moderate => Color.Warning,
+        Complexity.Complex => Color.Error,
+        _ => Color.Default
+    };
+
+    private void OnDeadlineChanged(DateTime? date)
+    {
+        if (date.HasValue)
+        {
+            _newTask.Deadline = date.Value;
+            StateHasChanged();
+        }
+    }
+
+    private string GetTaskCardStyle(int index)
+    {
+        var colors = new[]
+        {
+            "#cdfc93", // Light green
+            "#ff7ecd", // Pink
+            "#71d7ff", // Light blue
+            "#ce81ff"  // Purple
+        };
+        
+        return $"background-color: {colors[index % colors.Length]};";
+    }
+} 
